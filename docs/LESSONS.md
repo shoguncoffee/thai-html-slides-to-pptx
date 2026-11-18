@@ -95,6 +95,11 @@
     keep their reports under 250 words, and re-render only after all fixes are batched. Extraction (70 s) + LibreOffice (40 s)
     are the fixed costs.
 
+32. **Font-size bump with auto-fit (casual_skin.js step 7):** body +2px, small labels +3px, headings/numerals unchanged;
+    per slide it tries +2, +2 with tighter spacing, +1, +1 tight, 0 and keeps the largest size whose layout check
+    (off-slide text, text outside its card, text-on-text overlap, anything below y=1040) is no worse than before.
+    Text inside `clip-path` shapes (chevrons) is never enlarged - they have no measurable card and clip at the tip.
+
 ## Known remaining differences
 * Text ~1-3% narrower (no Thai letter-spacing). Subscript "₂" slightly different size/weight.
 * Not converted: animations/step builds, count-up, slide transitions, speaker notes (add notes in build.js if needed).

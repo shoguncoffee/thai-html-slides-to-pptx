@@ -138,6 +138,70 @@ function transform(PAL) {
       }
     });
     // 6. mascots: casual tilt
+    // 7. bigger body text (+2px body, +3px small labels; headings/numerals untouched), reduced per slide only if it would break layout
+    {
+      const items = [];
+      s.querySelectorAll('*').forEach((e) => {
+        if (e instanceof SVGElement || e.closest('[data-deco]')) return;
+        if (![...e.childNodes].some((n) => n.nodeType === 3 && n.nodeValue.trim())) return;
+        items.push([e, parseFloat(getComputedStyle(e).fontSize)]);
+      });
+      const sb0 = () => s.getBoundingClientRect();
+      const textRects = () => {
+        const out = []; const w = document.createTreeWalker(s, NodeFilter.SHOW_TEXT); let n; const rg = document.createRange(); const sb = sb0(); const k = sb.width / 1920;
+        while ((n = w.nextNode())) {
+          if (!n.nodeValue.trim() || n.parentElement.closest('svg,[data-deco]')) continue;
+          rg.selectNodeContents(n);
+          [...rg.getClientRects()].forEach((r) => { if (r.width > 2 && r.height > 2) out.push({ n, x0: (r.left - sb.left) / k, y0: (r.top - sb.top) / k, x1: (r.right - sb.left) / k, y1: (r.bottom - sb.top) / k }); });
+        }
+        return out;
+      };
+      const badness = () => {
+        const sb = sb0(); const k = sb.width / 1920; const tr = textRects(); let bad = 0;
+        // (1) off-slide text
+        tr.forEach((t) => { if (t.x1 > 1880 || t.y1 > 1028 || t.x0 < 20) bad++; });
+        // card/bar bottoms hugging the slide edge
+        s.querySelectorAll('*').forEach((e) => { if (e instanceof SVGElement || e.closest('[data-deco]')) return; const r = e.getBoundingClientRect(); const w = r.width / k; const bt = (r.bottom - sb.top) / k; if (w < 1800 && r.height > 2 && bt > 1040 && bt < 1100 && getComputedStyle(e).position !== 'absolute') bad++; });
+        // (2) text sticking out of its card
+        tr.forEach((t) => {
+          let e = t.n.parentElement, hops = 0;
+          while (e && e !== s && hops < 8) {
+            const cs = getComputedStyle(e); const bg = rgbParse(cs.backgroundColor);
+            const r = e.getBoundingClientRect();
+            if (bg && bg.a > 0.5 && r.width * r.height < 0.6 * sb.width * sb.height && r.width > 60 && r.height > 24) {
+              const x0 = (r.left - sb.left) / k, x1 = (r.right - sb.left) / k, y0 = (r.top - sb.top) / k, y1 = (r.bottom - sb.top) / k;
+              if (t.x1 > x1 + 2 || t.x0 < x0 - 2 || t.y1 > y1 + 4 || t.y0 < y0 - 4) bad++;
+              break;
+            }
+            e = e.parentElement; hops++;
+          }
+        });
+        // (3) text-on-text overlap (line boxes shrunk 25% vertically)
+        for (let i = 0; i < tr.length; i++) for (let j = i + 1; j < tr.length; j++) {
+          const a = tr[i], b2 = tr[j]; if (a.n === b2.n) continue;
+          const ha = (a.y1 - a.y0) * 0.25, hb = (b2.y1 - b2.y0) * 0.25;
+          const ox = Math.min(a.x1, b2.x1) - Math.max(a.x0, b2.x0), oy = Math.min(a.y1 - ha, b2.y1 - hb) - Math.max(a.y0 + ha, b2.y0 + hb);
+          if (ox > 4 && oy > 2) bad++;
+        }
+        return bad;
+      };
+      const scaleBy = (mode) => items.forEach(([e, sz]) => {
+        let d = 0;
+        if (mode > 0 && !e.closest('[style*="clip-path"]')) { if (sz >= 10 && sz <= 23.5) d = Math.min(mode + 1, 3); else if (sz > 23.5 && sz < 35) d = mode; }
+        e.style.fontSize = (sz + d) + 'px';
+      });
+      // spacing compression helper (only used when +2 text does not fit as-is)
+      const sp = [];
+      s.querySelectorAll('*').forEach((e) => { if (e instanceof SVGElement || e.closest('[data-deco]')) return; const cs = getComputedStyle(e); const mt = parseFloat(cs.marginTop), rg = parseFloat(cs.rowGap) || 0; if (mt >= 36 || rg >= 36) sp.push([e, e.style.marginTop, e.style.rowGap, mt, rg]); });
+      const compress = (on) => sp.forEach(([e, omt, org, mt, rg]) => { e.style.marginTop = on && mt >= 36 ? Math.max(18, mt - 18) + 'px' : omt; e.style.rowGap = on && rg >= 36 ? Math.max(18, rg - 14) + 'px' : org; });
+      scaleBy(0); const base = badness();
+      let chosen = 0, comp = 0;
+      outer: for (const m of [2, 1]) for (const cp of [0, 1]) { compress(cp); scaleBy(m); if (badness() <= base) { chosen = m; comp = cp; break outer; } }
+      if (!chosen) { compress(0); } else compress(comp);
+      scaleBy(chosen);
+      s.setAttribute('data-compact', String(comp));
+      s.setAttribute('data-fontplus', String(chosen));
+    }
     log.push(idx);
     s.classList.remove('on');
   });
