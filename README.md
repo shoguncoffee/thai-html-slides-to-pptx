@@ -30,6 +30,7 @@ near-pixel fidelity and editable text. Trade-off: shapes are not individually ed
 | `scripts/compare.py` | stack original (top) over pptx render (bottom) for visual QA / subagents |
 | `scripts/score.py` | mean abs pixel diff per slide (quick numeric regression) |
 | `scripts/check_text_parity.py` | every character in HTML text exists in the pptx |
+| `scripts/casual_skin.js` | v10 design pass (flat bg, cream title stickers, auto-placed decorations with reserved free zones) |
 | `scripts/fit_offset_from_pdf.py` | measure text placement of any renderer (Canva/PowerPoint PDF export) vs the HTML |
 | `scripts/calibrate_y.py` | re-fit the vertical-offset model if fonts/renderer change |
 | `scripts/setup_fonts.sh` | install Sarabun + Kodchasan locally for faithful QA renders |

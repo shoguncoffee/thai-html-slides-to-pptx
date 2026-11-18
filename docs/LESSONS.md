@@ -82,6 +82,19 @@
       Sarabun 600 at >=40px (abbreviation tokens inside titles) -> Regular so the line has one visual weight.
     * Canva falls back to FreeMono / NotoSansCJK for glyphs missing in Sarabun (check marks, arrows) - same as the browser.
 
+## Separable graphics, speed (added with the v10 'casual' redesign)
+28. **Mascots/decorations must be separate pictures** if the user wants to move/delete them in Canva. `extract.js` tags
+    `svg[aria-label]` (mascot) and `[data-deco]` (decorations) with `data-cap`, hides them for the background shot, then
+    screenshots each one alone (`html body section.on *{visibility:hidden}` + visible override with HIGHER specificity,
+    ancestors' backgrounds cleared, `omitBackground:true`) -> `el-NN-i.png`; `build.js` places them as pictures behind the text.
+29. **`z-index:-1` decorations vanished behind the slide's own background** in the HTML (section was positioned, z-index:auto,
+    so negative z-index children painted below its background). Fix: `section{isolation:isolate}`. The QA subagents caught this
+    only because the pptx (rendered from separate PNGs) showed shapes that the HTML did not.
+30. Decoration collision check must treat thin bars (height>3px) and full-width footer bars as content; keep >=48px from text.
+31. **Speed:** the user complained the conversion/QA was slow. Run QA as 6 subagents x ~11 slides in ONE message (not 3 x 22),
+    keep their reports under 250 words, and re-render only after all fixes are batched. Extraction (70 s) + LibreOffice (40 s)
+    are the fixed costs.
+
 ## Known remaining differences
 * Text ~1-3% narrower (no Thai letter-spacing). Subscript "₂" slightly different size/weight.
 * Not converted: animations/step builds, count-up, slide transitions, speaker notes (add notes in build.js if needed).

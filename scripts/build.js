@@ -199,6 +199,10 @@ function buildBoxes(frags) {
       const o = (py * raw.info.width + px) * raw.info.channels;
       return [raw.data[o], raw.data[o + 1], raw.data[o + 2]];
     };
+    // separable pictures first (behind text): decorations, then mascots
+    (d.els || []).sort((a, b2) => (a.kind === 'deco' ? 0 : 1) - (b2.kind === 'deco' ? 0 : 1)).forEach((el, i) => {
+      slide.addImage({ path: path.join(DIR, el.file), x: el.x * PX, y: el.y * PX, w: el.w * PX, h: el.h * PX, altText: el.kind === 'mascot' ? 'ตัวการ์ตูนปอด (ลบหรือย้ายได้)' : 'รูปทรงตกแต่ง (ลบหรือย้ายได้)', objectName: el.name + ' ' + (i + 1) });
+    });
     const boxes = buildBoxes(d.frags);
     // reading order: top-to-bottom, left-to-right
     boxes.sort((a, b) => Math.round(a.y / 40) - Math.round(b.y / 40) || a.x - b.x);

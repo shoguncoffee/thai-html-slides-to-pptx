@@ -182,15 +182,36 @@ function pageFn() {
     });
     // keep pseudo-element glyphs (bullets etc.) in the background
     if (data.pseudos.length) await p.addStyleTag({ content: data.pseudos.map((q) => `[data-pq="${q.id}"]${q.ps}{color:${q.color}!important;-webkit-text-fill-color:${q.fill}!important}`).join('\n') });
+    // separable graphics (mascots, decorations) -> own transparent PNGs so they can be moved/deleted in Canva/PowerPoint
+    const sep = await p.evaluate(() => {
+      const s = document.querySelector('section.on'); const sb = s.getBoundingClientRect(); const out = [];
+      const add = (e, kind, name) => { const r = e.getBoundingClientRect(); if (r.width < 8 || r.height < 8) return; const i = out.length; e.setAttribute('data-cap', String(i)); out.push({ i, kind, name, x: r.left - sb.left, y: r.top - sb.top, w: r.width, h: r.height }); };
+      s.querySelectorAll('[data-deco]').forEach((e) => add(e, 'deco', 'Decoration'));
+      s.querySelectorAll('svg[aria-label]').forEach((e) => { if (!e.closest('[data-deco]')) add(e, 'mascot', 'Mascot'); });
+      return out;
+    });
     // text-free background
     await p.addStyleTag({ content: 'section.on *:not([data-keep]):not([data-keep] *), section.on{color:transparent!important;-webkit-text-fill-color:transparent!important;text-shadow:none!important;text-decoration-color:transparent!important;-webkit-text-stroke-color:transparent!important}' });
     const box = await p.evaluate(() => { const r = document.querySelector('section.on').getBoundingClientRect(); return { x: r.left, y: r.top, width: r.width, height: r.height }; });
     const f = path.join(OUT, 'bg-' + String(n).padStart(2, '0') + '.png');
+    await p.addStyleTag({ content: '[data-cap]{visibility:hidden!important}' });
     await p.screenshot({ path: f, clip: box });
+    // transparent per-element captures (everything else hidden, ancestors' backgrounds cleared)
+    await p.evaluate(() => { let e = document.querySelector('section.on'); while (e && e !== document.documentElement.parentNode) { e.style.setProperty('background', 'transparent', 'important'); e.style.setProperty('box-shadow', 'none', 'important'); e = e.parentElement; } });
+    const els = [];
+    for (const it of sep) {
+      const css = await p.addStyleTag({ content: `html body section.on *{visibility:hidden!important}html body section.on [data-cap="${it.i}"],html body section.on [data-cap="${it.i}"] *{visibility:visible!important}` });
+      const x0 = Math.max(0, it.x), y0 = Math.max(0, it.y), x1 = Math.min(1920, it.x + it.w), y1 = Math.min(1080, it.y + it.h);
+      if (x1 - x0 < 8 || y1 - y0 < 8) { await css.evaluate((e) => e.remove()); continue; }
+      const ef = path.join(OUT, 'el-' + String(n).padStart(2, '0') + '-' + it.i + '.png');
+      await p.screenshot({ path: ef, clip: { x: x0, y: y0, width: x1 - x0, height: y1 - y0 }, omitBackground: true });
+      await css.evaluate((e) => e.remove());
+      els.push({ file: path.basename(ef), kind: it.kind, name: it.name, x: x0, y: y0, w: x1 - x0, h: y1 - y0 });
+    }
     // reference screenshot with text (for QA compare)
     await p.addStyleTag({ content: 'section.on, section.on *{color:revert!important;-webkit-text-fill-color:revert!important}' });
     await ctx.close();
-    results[n] = { box, ...data };
+    results[n] = { box, els, ...data };
   }
   const Q = 4;
   for (let i = 0; i < todo.length; i += Q) await Promise.all(todo.slice(i, i + Q).map(doSlide));
