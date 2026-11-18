@@ -170,7 +170,7 @@ function transform(PAL) {
             const r = e.getBoundingClientRect();
             if (bg && bg.a > 0.5 && r.width * r.height < 0.6 * sb.width * sb.height && r.width > 60 && r.height > 24) {
               const x0 = (r.left - sb.left) / k, x1 = (r.right - sb.left) / k, y0 = (r.top - sb.top) / k, y1 = (r.bottom - sb.top) / k;
-              if (t.x1 > x1 + 2 || t.x0 < x0 - 2 || t.y1 > y1 + 4 || t.y0 < y0 - 4) bad++;
+              if (t.x1 > x1 - 7 || t.x0 < x0 + 7 || t.y1 > y1 + 4 || t.y0 < y0 - 4) bad++;
               break;
             }
             e = e.parentElement; hops++;
@@ -187,7 +187,7 @@ function transform(PAL) {
       };
       const scaleBy = (mode) => items.forEach(([e, sz]) => {
         let d = 0;
-        if (mode > 0 && !e.closest('[style*="clip-path"]')) { if (sz >= 10 && sz <= 23.5) d = Math.min(mode + 1, 3); else if (sz > 23.5 && sz < 35) d = mode; }
+        if (mode > 0 && !e.closest('[style*="clip-path"]')) { if (sz >= 10 && sz <= 23.5) d = Math.min(mode + 1, 5); else if (sz > 23.5 && sz < 35) d = mode; }
         e.style.fontSize = (sz + d) + 'px';
       });
       // spacing compression helper (only used when +2 text does not fit as-is)
@@ -196,7 +196,7 @@ function transform(PAL) {
       const compress = (on) => sp.forEach(([e, omt, org, mt, rg]) => { e.style.marginTop = on && mt >= 36 ? Math.max(18, mt - 18) + 'px' : omt; e.style.rowGap = on && rg >= 36 ? Math.max(18, rg - 14) + 'px' : org; });
       scaleBy(0); const base = badness();
       let chosen = 0, comp = 0;
-      outer: for (const m of [2, 1]) for (const cp of [0, 1]) { compress(cp); scaleBy(m); if (badness() <= base) { chosen = m; comp = cp; break outer; } }
+      outer: for (const m of [4, 3, 2, 1]) for (const cp of [0, 1]) { compress(cp); scaleBy(m); if (badness() <= base) { chosen = m; comp = cp; break outer; } }
       if (!chosen) { compress(0); } else compress(comp);
       scaleBy(chosen);
       s.setAttribute('data-compact', String(comp));
