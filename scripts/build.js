@@ -8,22 +8,38 @@ const OUTFILE = process.argv[3];
 const DY = Number(process.env.DY || 0); // global vertical nudge (px, CSS space)
 const DX = Number(process.env.DX || 0);
 const DYK = Number(process.env.DYK || 0);
+// LINE_MODE=line (default): one single-spacing text box per rendered line, box top = Chrome glyph-box top.
+//   Renderer-independent (Canva/PowerPoint/LibreOffice all put the first baseline at top+ascent).
+// LINE_MODE=para: one box per paragraph with exact line spacing (editable paragraphs, but renderer-dependent y).
+const LINE_MODE = process.env.LINE_MODE || 'line';
 const data = JSON.parse(fs.readFileSync(path.join(DIR, 'frags.json'), 'utf8'));
 const PX = 1 / 144; // 1920 css px -> 13.333in
 const PT = 0.5; // css px -> pt
 
+// FONT_MODE=canva (default): only family names Canva/Google Docs/Keynote know: regular + bold (+Kodchasan Medium).
+//   Sarabun   : <600 -> Sarabun, >=600 -> Sarabun bold
+//   Kodchasan : <=500 -> Kodchasan Medium, >=600 -> Kodchasan bold (KOD600=medium to use Medium instead)
+// FONT_MODE=static : exact static-font names (Sarabun Medium / SemiBold ...) - only right if those fonts are installed.
+const FONT_MODE = process.env.FONT_MODE || 'canva';
 function fontFor(st) {
   const fam = /kodchasan/i.test(st.family) ? 'Kodchasan' : 'Sarabun';
   const w = st.weight;
+  if (FONT_MODE === 'static') {
+    if (fam === 'Kodchasan') {
+      if (w >= 700) return { face: 'Kodchasan', bold: true };
+      if (w >= 600) return { face: 'Kodchasan SemiBold', bold: false };
+      return { face: 'Kodchasan Medium', bold: false };
+    }
+    if (w >= 700) return { face: 'Sarabun', bold: true };
+    if (w >= 600) return { face: 'Sarabun SemiBold', bold: false };
+    if (w >= 500) return { face: 'Sarabun Medium', bold: false };
+    return { face: 'Sarabun', bold: false };
+  }
   if (fam === 'Kodchasan') {
-    if (w >= 700) return { face: 'Kodchasan', bold: true };
-    if (w >= 600) return { face: 'Kodchasan SemiBold', bold: false };
+    if (w >= 600 && process.env.KOD600 !== 'medium') return { face: 'Kodchasan', bold: true };
     return { face: 'Kodchasan Medium', bold: false };
   }
-  if (w >= 700) return { face: 'Sarabun', bold: true };
-  if (w >= 600) return { face: 'Sarabun SemiBold', bold: false };
-  if (w >= 500) return { face: 'Sarabun Medium', bold: false };
-  return { face: 'Sarabun', bold: false };
+  return { face: 'Sarabun', bold: w >= 600 };
 }
 
 function runOpts(st, align, text) {
@@ -51,6 +67,8 @@ const txt = (f) => (f.style.upper ? f.text.toUpperCase() : f.text);
 
 function yAdj(b) {
   const sz = Math.max(...b.lines[0].map((r) => r.st.size));
+  // line mode: Canva and LibreOffice (measured independently) both land ~0.055em + 1.75px above Chrome's glyph-box top
+  if (LINE_MODE === 'line') return 0.055 * sz + 1.75 + DY;
   return -0.495 * b.lh + 0.549 * sz + 2.1 + DY;
 }
 function buildBoxes(frags) {
@@ -66,7 +84,7 @@ function buildBoxes(frags) {
     const T = Math.min(...g.map((f) => f.top)), B = Math.max(...g.map((f) => f.bottom));
     const th = (st.rot * Math.PI) / 180;
     const len = (R - L) / Math.cos(th) - st.size * 0.1;
-    const h = st.lh;
+    const h = LINE_MODE === 'line' ? st.size * 1.3 : st.lh;
     const cx = (L + R) / 2, cy = (T + B) / 2;
     boxes.push({ x: cx - len / 2 - 6, y: cy - h / 2, w: len + 12, h, lines: [g.map((f) => ({ text: txt(f), st: f.style }))], align: 'center', lh: h, rot: st.rot });
   }
@@ -133,7 +151,13 @@ function buildBoxes(frags) {
       runs[runs.length - 1].text = runs[runs.length - 1].text.replace(/\s+$/, '');
       return runs.filter((r) => r.text.length);
     };
-    if (align) {
+    if (LINE_MODE === 'line') {
+      lines.forEach((l) => l.segs.forEach((sg) => {
+        const L = Math.min(...sg.map((f) => f.left)), R = Math.max(...sg.map((f) => f.right));
+        const T = Math.min(...sg.map((f) => f.top)), B = Math.max(...sg.map((f) => f.bottom));
+        boxes.push({ x: L, y: T, w: R - L, h: B - T, lh: B - T, align: align || 'left', lines: [mkRuns(sg)], single: true });
+      }));
+    } else if (align) {
       const pitch = lines.length > 1 ? (lines[lines.length - 1].cy - lines[0].cy) / (lines.length - 1) : null;
       const lh = pitch || Math.max(...lines[0].frags.map((f) => f.style.lh));
       const L = Math.min(...lines.map((l) => l.left)), R = Math.max(...lines.map((l) => l.right));
@@ -201,9 +225,10 @@ function buildBoxes(frags) {
       const opts = {
         x: x * PX, y: (b.y + yAdj(b)) * PX, w: w * PX, h: b.h * PX,
         margin: 0, valign: 'top', wrap: !!wide, fit: 'none', isTextBox: true,
-        lineSpacing: Math.round(b.lh * PT * 100) / 100, paraSpaceAfter: 0, paraSpaceBefore: 0,
+        paraSpaceAfter: 0, paraSpaceBefore: 0,
         objectName: `Text ${i + 1}`,
       };
+      if (LINE_MODE !== 'line') opts.lineSpacing = Math.round(b.lh * PT * 100) / 100;
       if (b.rot) opts.rotate = b.rot < 0 ? 360 + b.rot : b.rot;
       slide.addText(runs, opts);
       nBoxes++;

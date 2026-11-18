@@ -25,6 +25,11 @@ python3 <pptx-skill>/scripts/office/validate.py deck.pptx
 ```
 Ship the pptx **together with the font files** - fonts cannot be embedded in pptx by pptxgenjs.
 
+## Target app matters
+* Canva import: default settings (`FONT_MODE=canva`, `LINE_MODE=line`). After import, export the deck as PDF and run
+  `scripts/fit_offset_from_pdf.py` if text still looks shifted.
+* PowerPoint with Sarabun/Kodchasan installed: `FONT_MODE=static` gives exact weights; verify placement (untested).
+
 ## Time sinks last time (avoid)
 * Trying `charSpacing` on Thai text, then debugging garbled marks (see LESSONS #1) - it is already handled.
 * Calibrating vertical offset by trial (-5/-8/-11/...) - the fitted formula is already in `yAdj()` in build.js.

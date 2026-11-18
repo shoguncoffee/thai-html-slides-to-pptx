@@ -55,6 +55,25 @@
 22. Both `pdftoppm` and `pdftocairo` showed identical glyph issues -> if marks look wrong it is the PPTX content, not the rasterizer.
     A plain-text test pptx (`ttest.js` idea: same string in several fonts) quickly separates font problems from your pipeline.
 
+## Canva import (and other non-LibreOffice renderers) - learned the hard way
+23. **A pptx tuned only against LibreOffice looked wrong in Canva.** Do not trust LO alone: export the imported deck
+    from Canva as PDF and measure it (`scripts/fit_offset_from_pdf.py`; `pdffonts x.pdf` shows which fonts it really used).
+24. **Canva only knows some family names.** Embedded fonts in its PDF were Sarabun-Regular/Bold and
+    Kodchasan-Regular/Medium/Bold. `Sarabun Medium`, `Sarabun SemiBold`, `Kodchasan SemiBold` are NOT recognised and
+    silently fall back to Regular (titles looked too light). *Fix (default `FONT_MODE=canva`):* Sarabun <600 Regular,
+    >=600 Bold; Kodchasan 500 -> `Kodchasan Medium`, >=600 -> `Kodchasan` bold (`KOD600=medium` for lighter).
+    `FONT_MODE=static` keeps the exact static names for PowerPoint/LO with the full families installed.
+25. **Exact line spacing (`spcPts`) is interpreted differently by each app.** Fitted on 1,466 single-line boxes:
+    LibreOffice puts the baseline at ~`top + L - 0.13em` (extra leading above), Canva at ~`top + ascent` regardless of L
+    (extra leading below), Chrome in the middle. The LO-fitted correction (`-0.495L+0.549s+2.1`) therefore moved text
+    the wrong way in Canva: giant numeral "34" sank ~65px into the paragraph below, pill labels/circle digits sat high.
+    *Fix (default `LINE_MODE=line`):* one **single-spacing text box per rendered line**, box top = Chrome's glyph-box
+    top (+0.055em +1.75px, fitted on both Canva and LO). Without `lnSpc` all apps put the first baseline at top+ascent,
+    so placement agrees everywhere. `LINE_MODE=para` keeps paragraph boxes (editable reflow) but is renderer-dependent.
+26. Sarabun/Kodchasan metrics (hhea=typo, USE_TYPO_METRICS): Sarabun A=1.068 D=0.232, Kodchasan A=1.024 D=0.276 (A+D=1.3);
+    win metrics are much larger (1.286/0.567) - an app using win metrics would place text ~0.2em too low.
+    PowerPoint desktop was never tested - if someone has it, run the PDF-export measurement there.
+
 ## Known remaining differences
 * Text ~1-3% narrower (no Thai letter-spacing). Subscript "₂" slightly different size/weight.
 * Not converted: animations/step builds, count-up, slide transitions, speaker notes (add notes in build.js if needed).
