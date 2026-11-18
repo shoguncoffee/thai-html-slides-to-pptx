@@ -100,7 +100,44 @@
     (off-slide text, text outside its card, text-on-text overlap, anything below y=1040) is no worse than before.
     Text inside `clip-path` shapes (chevrons) is never enlarged - they have no measurable card and clip at the tip.
 
+## Native shapes (v13): cards/pills/dots/bars are real pptx shapes, not baked into the background
+33. User wanted to edit cards in Canva, so `extract.js` now walks the DOM in paint order (`layerFn`) and emits **layers**:
+    * `shape` - any element with `background-color` and/or borders: `rect` / `roundRect` (uniform radius; pill/ellipse when
+      radius >= half the side) / `custGeom` (mixed radii via cubic corners, `clip-path: polygon()` incl. `calc(100% - Npx)`).
+      Uniform border -> same shape's outline inset by bw/2 (CSS border is inside the box, OOXML line is centred).
+      One/two borders -> thin rect (solid) or dashed `line` per side. CSS border-triangle (one coloured side, neighbours
+      transparent) -> triangle polygon. rgba/opacity -> fill transparency.
+    * `pic` - things that cannot be native, each screenshotted alone (transparent PNG): mascots, `[data-deco]`, other `<svg>`,
+      `<img>`, and **`data-keep` outline/vertical text**.
+    Native paint is hidden for the background shot by setting INLINE `background-color/border-*-color: transparent !important`
+    (inline !important beats a stylesheet !important - the earlier 'freeze currentColor' step had set inline values).
+34. **Z-order trap:** everything left in the background image is covered by ANY native shape drawn later. First attempt lost the
+    big outline letters (A, P, S, O) because they stayed in the background under the new white cards. Rule: nothing may stay
+    in the background if it paints above a nativised element -> make it a `pic` layer, in DOM order with the shapes.
+    Background image now = slide background colour only (plus rotated/transformed leftovers, none in this deck).
+35. Build order per slide: deco pictures, then layers in DOM order, then text boxes. Result on a 70-slide deck: ~780 AUTO_SHAPE,
+    34 FREEFORM (polygons), 73 pictures, ~1760 text boxes; blurred diff vs HTML stays ~2/255 (`scripts/score_blur.py`).
+36. `survey` tip: before writing a converter, histogram computed-style features over all slides (bg colour, border sides,
+    radius, clip-path, shadow, gradient, pseudo-elements, transform). This deck had no gradients, shadows or pseudo-elements,
+    which is why a pure-shape conversion was feasible.
+
+## Content-update pipeline (new source document supersedes the old one)
+37. Diff old docx vs new docx text (`diff.txt`), list conflicts + removed facts + new sections, split by slide range into
+    ~6 subagents that each return JSON patches `{slide, find, replace}` / `{slide, remove}` (substring edits on exact text
+    nodes). `scripts/applypatch.js` applies them to the pre-skin HTML; structural edits (new slides cloned from similar ones,
+    renumbering, label changes) go in a small `structural.js`. Then re-run the skin (`casual_skin.js`) so the fit loop re-fits
+    font sizes, render all slides, run `audit.js` (off-slide / escape / bottom checks), look at the worst slides yourself.
+    Gotchas fixed after QA: (a) `||1e9` in the CSS radius-overlap scale factor zeroed every mixed radius (use sum>0 ? len/sum : 1);
+    (b) a square card inside an `overflow:hidden` rounded ancestor inherits the ancestor's corner radius where corners coincide;
+    a painted child sticking OUT of a clipping ancestor becomes a `piece` picture (screenshot is clipped by the browser);
+    (c) paint order is not just DOM order: elements with `clip-path`/transform/opacity/position+z-index form stacking contexts
+    and paint above normal-flow siblings - layers are sorted by (z-index, stacking-context?, DOM index); a chevron label with
+    `clip-path` over a card with negative margin vanished until this was done.
+38. If new content does not fit even at +0 font, shorten the text (merge bullets) - the fit loop cannot invent space.
+
 ## Known remaining differences
 * Text ~1-3% narrower (no Thai letter-spacing). Subscript "₂" slightly different size/weight.
+* Native shapes: opacity of overlapping translucent shapes is per-shape (CSS group opacity differs slightly); box-shadows/gradients
+  would still need `pic` layers (none in this deck).
 * Not converted: animations/step builds, count-up, slide transitions, speaker notes (add notes in build.js if needed).
 * QA was via LibreOffice only; PowerPoint may shift text a few px vertically (formula was fitted to LO).

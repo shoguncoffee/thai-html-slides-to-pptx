@@ -179,13 +179,72 @@ function buildBoxes(frags) {
   return boxes.filter((b) => b.lines.every((l) => l.length) || true);
 }
 
+
+// ---- native shapes -------------------------------------------------------------
+const K = 0.5523;
+function pathPts(w, h, rs) { // rounded rect with per-corner radii -> custGeom points (inches, relative to box)
+  const [tl, tr, br, bl] = rs.map((v) => v * PX); w *= PX; h *= PX;
+  const P = [{ x: tl, y: 0, moveTo: true }, { x: w - tr, y: 0 }];
+  const cv = (x1, y1, x2, y2, x, y) => P.push({ x, y, curve: { type: 'cubic', x1, y1, x2, y2 } });
+  if (tr) cv(w - tr + tr * K, 0, w, tr - tr * K, w, tr); P.push({ x: w, y: h - br });
+  if (br) cv(w, h - br + br * K, w - br + br * K, h, w - br, h); P.push({ x: bl, y: h });
+  if (bl) cv(bl - bl * K, h, 0, h - bl + bl * K, 0, h - bl); P.push({ x: 0, y: tl });
+  if (tl) cv(0, tl - tl * K, tl - tl * K, 0, tl, 0);
+  P.push({ close: true });
+  return P;
+}
+function shapeName(L) {
+  const m = Math.min(L.w, L.h), M = Math.max(L.w, L.h);
+  if (L.geom.kind === 'poly') return 'Shape';
+  if (m <= 24 && M <= 24) return 'Dot';
+  if (m <= 8) return 'Line';
+  if (L.geom.kind === 'round' && L.geom.r >= m / 2 - 1) return 'Pill';
+  if (L.w >= 1880 && L.h >= 1040) return 'Panel';
+  return L.fill || L.line ? 'Card' : 'Shape';
+}
+function addNative(pres, slide, L, idx) {
+  const nm = shapeName(L) + ' ' + idx;
+  const lineOf = (q, extra) => ({ color: q.color, width: Math.max(0.25, q.w * PT), transparency: Math.round((1 - q.a) * 100), dashType: q.st === 'dotted' ? 'sysDot' : q.st === 'dashed' ? 'dash' : 'solid', ...extra });
+  let { x, y, w, h } = L;
+  let ln = null;
+  if (L.line) { const bw = L.line.w; x += bw / 2; y += bw / 2; w -= bw; h -= bw; ln = lineOf({ color: L.line.color, w: bw, a: L.line.a, st: L.line.st }); }
+  const inset = L.line ? L.line.w / 2 : 0;
+  const o = { x: x * PX, y: y * PX, w: w * PX, h: h * PX, objectName: nm, line: ln || { type: 'none' }, fill: L.fill ? { color: L.fill, transparency: Math.round((1 - L.fa) * 100) } : { type: 'none' } };
+  if (o.fill.transparency === 0) delete o.fill.transparency;
+  const g = L.geom;
+  if (g.kind === 'rect') slide.addShape(pres.ShapeType.rect, o);
+  else if (g.kind === 'round') {
+    const r = Math.max(0, g.r - inset);
+    if (r >= Math.min(w, h) / 2 - 0.5 && Math.abs(w - h) < 1.5) slide.addShape(pres.ShapeType.ellipse, o);
+    else slide.addShape(pres.ShapeType.roundRect, { ...o, rectRadius: Math.min(r, Math.min(w, h) / 2) * PX });
+  } else if (g.kind === 'path') slide.addShape(pres.ShapeType.custGeom, { ...o, points: pathPts(w, h, g.radii.map((v) => Math.max(0, v - inset))) });
+  else if (g.kind === 'poly') {
+    const pts = g.pts.map((p, i) => ({ x: p[0] * PX, y: p[1] * PX, ...(i === 0 ? { moveTo: true } : {}) }));
+    pts.push({ close: true });
+    slide.addShape(pres.ShapeType.custGeom, { ...o, points: pts });
+  }
+  (L.sideBars || []).forEach((sb, k) => {
+    const bw = sb.w, side = sb.side; // 0 top,1 right,2 bottom,3 left
+    const q = { color: sb.color, w: bw, a: sb.a, st: sb.st };
+    if (sb.st === 'solid') {
+      const bx = side === 1 ? L.x + L.w - bw : L.x, by = side === 2 ? L.y + L.h - bw : L.y;
+      const bwid = side === 1 || side === 3 ? bw : L.w, bhei = side === 0 || side === 2 ? bw : L.h;
+      slide.addShape(pres.ShapeType.rect, { x: bx * PX, y: by * PX, w: bwid * PX, h: bhei * PX, fill: { color: sb.color, ...(sb.a < 0.99 ? { transparency: Math.round((1 - sb.a) * 100) } : {}) }, line: { type: 'none' }, objectName: (side % 2 ? 'Bar ' : 'Rule ') + idx + '.' + k });
+    } else {
+      const horiz = side === 0 || side === 2;
+      const lx = side === 1 ? L.x + L.w - bw / 2 : side === 3 ? L.x + bw / 2 : L.x, ly = side === 2 ? L.y + L.h - bw / 2 : side === 0 ? L.y + bw / 2 : L.y;
+      slide.addShape(pres.ShapeType.line, { x: lx * PX, y: ly * PX, w: horiz ? L.w * PX : 0, h: horiz ? 0 : L.h * PX, line: lineOf(q), objectName: 'Divider ' + idx + '.' + k });
+    }
+  });
+}
+
 (async () => {
   const pres = new pptxgen();
   pres.layout = 'LAYOUT_WIDE';
   pres.title = 'Cardiopulmonary Case Deck';
   pres.theme = { headFontFace: 'Kodchasan', bodyFontFace: 'Sarabun' };
   const ids = Object.keys(data).map(Number).sort((a, b) => a - b);
-  let nBoxes = 0;
+  let nBoxes = 0, nShapes = 0;
   for (const n of ids) {
     const d = data[n];
     const slide = pres.addSlide();
@@ -199,9 +258,13 @@ function buildBoxes(frags) {
       const o = (py * raw.info.width + px) * raw.info.channels;
       return [raw.data[o], raw.data[o + 1], raw.data[o + 2]];
     };
-    // separable pictures first (behind text): decorations, then mascots
-    (d.els || []).sort((a, b2) => (a.kind === 'deco' ? 0 : 1) - (b2.kind === 'deco' ? 0 : 1)).forEach((el, i) => {
-      slide.addImage({ path: path.join(DIR, el.file), x: el.x * PX, y: el.y * PX, w: el.w * PX, h: el.h * PX, altText: el.kind === 'mascot' ? 'ตัวการ์ตูนปอด (ลบหรือย้ายได้)' : 'รูปทรงตกแต่ง (ลบหรือย้ายได้)', objectName: el.name + ' ' + (i + 1) });
+    // layers in DOM order: decorations first, then native shapes / pictures as they stack in the HTML
+    const layers = d.layers || (d.els || []).map((e) => ({ ...e, t: 'pic' }));
+    const ordered = [...layers.filter((l) => l.t === 'pic' && l.kind === 'deco'), ...layers.filter((l) => !(l.t === 'pic' && l.kind === 'deco'))];
+    ordered.forEach((L, i) => {
+      if (L.t === 'shape') { if (process.env.NATIVE !== '0') { addNative(pres, slide, L, i + 1); nShapes++; } return; }
+      const alt = { mascot: 'ตัวการ์ตูนปอด (ลบหรือย้ายได้)', deco: 'รูปทรงตกแต่ง (ลบหรือย้ายได้)', icon: 'ไอคอน (ลบหรือย้ายได้)', piece: 'ลวดลายตกแต่ง (ลบหรือย้ายได้)', text: 'ตัวอักษรเส้นขอบขนาดใหญ่ (เป็นรูปภาพ ลบหรือย้ายได้)', image: 'รูปภาพ' }[L.kind] || 'รูปภาพ';
+      slide.addImage({ path: path.join(DIR, L.file), x: L.x * PX, y: L.y * PX, w: L.w * PX, h: L.h * PX, altText: alt, objectName: (L.name || 'Picture') + ' ' + (i + 1) });
     });
     const boxes = buildBoxes(d.frags);
     // reading order: top-to-bottom, left-to-right
@@ -245,5 +308,5 @@ function buildBoxes(frags) {
   }
   await pres.writeFile({ fileName: OUTFILE });
   fs.writeFileSync(path.join(DIR, 'boxes.json'), JSON.stringify(global.DUMP));
-  console.log('slides', ids.length, 'text boxes', nBoxes);
+  console.log('slides', ids.length, 'text boxes', nBoxes, 'native shapes', nShapes);
 })();

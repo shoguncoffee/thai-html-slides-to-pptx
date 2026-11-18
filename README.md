@@ -8,17 +8,17 @@ a long session; this repo exists so the next one takes minutes. **Read `docs/FAS
 
 > Contains no patient data or deck content - only tooling and notes. Keep it that way.
 
-## Approach (hybrid)
-Per slide:
-1. **Background PNG** - screenshot of the slide with all text made transparent (shapes, gradients, SVG mascots,
-   bullets, outline numerals, vertical text stay in the image).
-2. **Native text boxes** - every text node is measured in Chromium (per-character `Range` rects), grouped into
-   lines/paragraphs/runs and re-created at the exact pixel position with the same font/size/colour/weight.
-   `wrap:none`, one single-spacing box per rendered line (default `LINE_MODE=line`) so wrapping and vertical placement
-   do not depend on the app's line-spacing rules (see LESSONS 23-26: Canva vs LibreOffice differ).
+## Approach (native shapes + native text + a few pictures)
+Per slide (`extract.js` -> `frags.json`, `build.js` -> pptx):
+1. **Background PNG** - only the slide's own background colour (all nativised paint and text made transparent).
+2. **Native shapes** - every element with a background/border becomes a rect / rounded rect / pill / ellipse / polygon / freeform
+   in DOM order (so cards, chips, dots, bars, dividers, chevrons stay editable in PowerPoint/Canva).
+3. **Pictures** - mascots, decorations, icons/svg, `<img>`, outline letters: separate transparent PNGs (move/delete freely).
+4. **Native text boxes** - every text node measured in Chromium (per-character `Range` rects), one single-spacing box per
+   rendered line at the exact pixel position (`LINE_MODE=line`), Canva-safe font names (see LESSONS 23-27).
 
-Why not fully native shapes? Cards/gradients/SVG/shadows/clip-paths do not map 1:1 to OOXML; the hybrid gave
-near-pixel fidelity and editable text. Trade-off: shapes are not individually editable.
+`NATIVE=0 node build.js ...` is NOT a valid fallback (the background no longer contains the shapes); use `scripts` from tag v12
+history if you want the old background-baked look.
 
 ## Layout of this repo
 | path | purpose |
@@ -28,6 +28,8 @@ near-pixel fidelity and editable text. Trade-off: shapes are not individually ed
 | `scripts/run.sh` | build -> LibreOffice PDF -> PNG pages (QA render) |
 | `scripts/render_ref.js` | render the original HTML slides to PNG (ground truth for compare) |
 | `scripts/compare.py` | stack original (top) over pptx render (bottom) for visual QA / subagents |
+| `scripts/score_blur.py` | blurred diff (ignores text antialiasing) + count of strongly different pixels per slide |
+| `scripts/applypatch.js` | apply `{slide,find,replace}` / `{slide,remove}` JSON patches to the deck HTML (content updates) |
 | `scripts/score.py` | mean abs pixel diff per slide (quick numeric regression) |
 | `scripts/check_text_parity.py` | every character in HTML text exists in the pptx |
 | `scripts/casual_skin.js` | v10 design pass (flat bg, cream title stickers, auto-placed decorations with reserved free zones) |

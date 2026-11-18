@@ -194,10 +194,11 @@ function transform(PAL) {
       const sp = [];
       s.querySelectorAll('*').forEach((e) => { if (e instanceof SVGElement || e.closest('[data-deco]')) return; const cs = getComputedStyle(e); const mt = parseFloat(cs.marginTop), rg = parseFloat(cs.rowGap) || 0; if (mt >= 36 || rg >= 36) sp.push([e, e.style.marginTop, e.style.rowGap, mt, rg]); });
       const compress = (on) => sp.forEach(([e, omt, org, mt, rg]) => { e.style.marginTop = on && mt >= 36 ? Math.max(18, mt - 18) + 'px' : omt; e.style.rowGap = on && rg >= 36 ? Math.max(18, rg - 14) + 'px' : org; });
-      scaleBy(0); const base = badness();
-      let chosen = 0, comp = 0;
-      outer: for (const m of [4, 3, 2, 1]) for (const cp of [0, 1]) { compress(cp); scaleBy(m); if (badness() <= base) { chosen = m; comp = cp; break outer; } }
-      if (!chosen) { compress(0); } else compress(comp);
+      // evaluate candidates; take the first with zero problems, otherwise the least-bad (ties -> larger text)
+      const cands = []; for (const m of [4, 3, 2, 1, 0]) for (const cp of [0, 1]) cands.push([m, cp]);
+      let chosen = 0, comp = 0, bestBd = Infinity;
+      for (const [m, cp] of cands) { compress(cp); scaleBy(m); const bd = badness(); if (bd < bestBd) { bestBd = bd; chosen = m; comp = cp; } if (bd === 0) break; }
+      compress(comp);
       scaleBy(chosen);
       s.setAttribute('data-compact', String(comp));
       s.setAttribute('data-fontplus', String(chosen));
