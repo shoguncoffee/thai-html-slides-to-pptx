@@ -1,0 +1,3 @@
+{ "name": "thai-html-slides-to-pptx", "private": true, "version": "1.0.0",
+  "description": "Convert a fixed-canvas HTML slide deck to an editable-text PPTX (background image + native text boxes)",
+  "dependencies": { "pptxgenjs": "^3.12.0", "playwright": "*", "sharp": "*" } }
