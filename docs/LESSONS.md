@@ -74,6 +74,14 @@
     win metrics are much larger (1.286/0.567) - an app using win metrics would place text ~0.2em too low.
     PowerPoint desktop was never tested - if someone has it, run the PDF-export measurement there.
 
+27. **Canva round 2 (measured from its PDF export): placement error ~0 px at every font size** after LINE_MODE=line, fonts
+    resolved to Sarabun/Kodchasan Regular/Medium/Bold. Remaining defects found by eye and fixed:
+    * Canva ignores `wrap:none`; Bold is wider than the SemiBold original, so a title wrapped ("LPM" fell onto line 2 and
+      overlapped the subtitle). *Fix:* box width slack = max(60px, 30%) on every box (+60 for tracked labels).
+    * Kodchasan 600 at >=40px rendered as Bold = too heavy -> use `Kodchasan Medium` for big titles (`KOD_BIG=bold` to undo);
+      Sarabun 600 at >=40px (abbreviation tokens inside titles) -> Regular so the line has one visual weight.
+    * Canva falls back to FreeMono / NotoSansCJK for glyphs missing in Sarabun (check marks, arrows) - same as the browser.
+
 ## Known remaining differences
 * Text ~1-3% narrower (no Thai letter-spacing). Subscript "₂" slightly different size/weight.
 * Not converted: animations/step builds, count-up, slide transitions, speaker notes (add notes in build.js if needed).

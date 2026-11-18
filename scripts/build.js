@@ -36,9 +36,11 @@ function fontFor(st) {
     return { face: 'Sarabun', bold: false };
   }
   if (fam === 'Kodchasan') {
-    if (w >= 600 && process.env.KOD600 !== 'medium') return { face: 'Kodchasan', bold: true };
+    if (w >= 700 || (w >= 600 && process.env.KOD600 !== 'medium' && !(st.size >= 40 && process.env.KOD_BIG !== 'bold'))) return { face: 'Kodchasan', bold: true };
     return { face: 'Kodchasan Medium', bold: false };
   }
+  // Sarabun 600 at headline size (e.g. abbreviations inside a Kodchasan title) -> Regular so it matches Kodchasan Medium
+  if (w === 600 && st.size >= 40 && process.env.KOD_BIG !== 'bold') return { face: 'Sarabun', bold: false };
   return { face: 'Sarabun', bold: w >= 600 };
 }
 
@@ -220,8 +222,10 @@ function buildBoxes(frags) {
       });
       let x = b.x + DX, w = b.w;
       const wide = b.lines.some((ln) => ln.some((r) => r.st.ls > 0.3 && !/[\u0E00-\u0E7F]/.test(r.text)));
-      if (wide) w += 60;
-      if (b.align === 'center') { x -= 8; w += 16; } else if (b.align === 'right') { x -= 16; w += 16; } else w += 16 + slack;
+      // generous width slack: Canva ignores wrap:none (a bold run wider than the SemiBold original wrapped "LPM" onto a 2nd line)
+      const extra = Math.max(60, w * 0.3) + (wide ? 60 : 0);
+      if (b.align === 'center') x -= extra / 2; else if (b.align === 'right') x -= extra;
+      w += extra;
       const opts = {
         x: x * PX, y: (b.y + yAdj(b)) * PX, w: w * PX, h: b.h * PX,
         margin: 0, valign: 'top', wrap: !!wide, fit: 'none', isTextBox: true,
